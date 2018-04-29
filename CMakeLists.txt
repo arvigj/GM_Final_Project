@@ -28,7 +28,9 @@ option(LIBIGL_WITH_XML               "Use XML"            OFF)
 
 find_package(LIBIGL REQUIRED QUIET)
 
+find_package( OpenCV REQUIRED )
+
 # Add your project files
 file(GLOB SRCFILES src/main.cpp)
-add_executable(${PROJECT_NAME}_bin ${SRCFILES})
-target_link_libraries(${PROJECT_NAME}_bin igl::core igl::opengl_glfw igl::opengl_glfw_imgui)
+add_executable(${PROJECT_NAME}_bin ${SRCFILES} src/content_aware_bbw.h src/content_aware_bbw.cpp)
+target_link_libraries(${PROJECT_NAME}_bin igl::core igl::opengl_glfw igl::opengl_glfw_imgui ${OpenCV_LIBS})
