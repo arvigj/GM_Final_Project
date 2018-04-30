@@ -7,7 +7,7 @@
 using namespace cv;
 
 int main(int argc, char** argv) {
-    if ( argc != 2 )
+    if ( argc < 2 )
     {
         printf("usage: DisplayImage.out <Image_Path>\n");
         return -1;
@@ -17,9 +17,9 @@ int main(int argc, char** argv) {
     Mat source, target, roi;
     source = imread( argv[1], CV_LOAD_IMAGE_COLOR );
     //target = imread( argv[2], CV_LOAD_IMAGE_COLOR );
-    //roi = imread( argv[3], CV_LOAD_IMAGE_COLOR );
+    roi = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE );
 
-    std::cout << (source == 0) << std::endl;
+    bbw(source, roi, 10);
     if ( !source.data )
     {
         printf("No image data \n");
