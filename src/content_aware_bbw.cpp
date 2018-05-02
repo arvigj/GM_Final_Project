@@ -145,14 +145,14 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     Eigen::Map<Eigen::VectorXd> roi_vec(roi_matrix.data(), roi_matrix.size());
     Eigen::Map<Eigen::VectorXd> x_vec(x_coords.data(), x_coords.size());
     Eigen::Map<Eigen::VectorXd> y_vec(y_coords.data(), y_coords.size());
-    Eigen::VectorXd scalar_field(roi_vec.size()*2);
-    Eigen::MatrixXd coords(2*roi_matrix.size(), 3), V;
+    Eigen::VectorXd scalar_field(roi_vec.size());
+    Eigen::MatrixXd coords(roi_matrix.size(), 3), V;
     Eigen::MatrixXi F;
     scalar_field << roi_vec;
     scalar_field /= 255;
     coords.col(0) << x_vec;
     coords.col(1) << y_vec;
-    coords.col(2) << Eigen::VectorXd(roi_matrix.size()), Eigen::ArrayXd(roi_matrix.size(),1)+1;
+    coords.col(2) << Eigen::VectorXd(roi_matrix.size());
     //igl::copyleft::marching_cubes(scalar_field, coords, roi.cols, roi.rows, 4, V, F);
     //igl::writeOFF("file.off", V, F);
     /*
@@ -201,3 +201,55 @@ cv::Mat gaussian(cv::Size size, cv::Point center, double sigma) {
     return gauss;
 }
 
+Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, Eigen::MatrixXd w) {
+    assert(roi.channels() == 1);
+
+    cv::SiftFeatureDetector detector;
+    std::vector<cv::KeyPoint> kp_s, kp_t;
+    detector.detect(image_s, kp_s, roi>0);
+    detector.detect(image_t, kp_t);
+    cv::BFMatcher matcher(cv::NORM_L2);
+    cv::SiftDescriptorExtractor extractor;
+    cv::Mat d_s, d_t;
+    extractor.compute(image_s, kp_s, d_s);
+    extractor.compute(image_t, kp_t, d_t);
+    std::vector<std::vector<cv::DMatch>> matches;
+    std::vector<cv::DMatch> good_matches;
+    matcher.knnMatch(d_s, d_t, matches, 2);
+    for (auto i=matches.begin(); i!=matches.end(); i++) {
+        cv::DMatch a,b;
+        a = i->at(0);
+        b = i->at(1);
+        if (a.distance < 0.75*b.distance) {
+            good_matches.push_back(a);
+        }
+    }
+
+    auto orient2D = [] (Eigen::Vector2d pa, Eigen::Vector2d pb, Eigen::Vector2d pc) {
+        Eigen::Vector3d a,b;
+        a << pa - pb, 0;
+        b << pc - pb, 0;
+        double c = a.cross(b)(2);
+        if (c> 0) {
+            return 1;
+        } else if (c< 0) {
+            return -1;
+        } else {
+            return 0;
+        }
+    };
+
+    auto incircle = [] (Eigen::Vector2d pa, Eigen::Vector2d pb, Eigen::Vector2d pc, Eigen::Vector2d pd) {
+
+        return 0;
+    };
+
+    cv::Mat image_matches;
+    cv::drawMatches(image_s, kp_s, image_t, kp_t, good_matches, image_matches);
+
+    cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
+    cv::imshow("Display Image", image_matches);
+
+    cv::waitKey(0);
+
+}

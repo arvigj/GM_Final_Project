@@ -16,10 +16,11 @@ int main(int argc, char** argv) {
 
     Mat source, target, roi;
     source = imread( argv[1], CV_LOAD_IMAGE_COLOR );
-    //target = imread( argv[2], CV_LOAD_IMAGE_COLOR );
+    target = imread( argv[3], CV_LOAD_IMAGE_COLOR );
     roi = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE );
 
-    bbw(source, roi, 10);
+    //bbw(source, roi, 10);
+    transformations(source, target, roi, Eigen::MatrixXd(0,0));
     if ( !source.data )
     {
         printf("No image data \n");
