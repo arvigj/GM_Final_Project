@@ -215,20 +215,44 @@ Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, E
     extractor.compute(image_t, kp_t, d_t);
     std::vector<std::vector<cv::DMatch>> matches;
     std::vector<cv::DMatch> good_matches;
+    std::vector<cv::Point2d> M_s, M_t;
     matcher.knnMatch(d_s, d_t, matches, 2);
+    Eigen::MatrixXi matches_duplicate = Eigen::MatrixXi::Zero(image_s.rows, image_s.cols);
+    matches_duplicate.array() -= 1;
     for (auto i=matches.begin(); i!=matches.end(); i++) {
         cv::DMatch a,b;
         a = i->at(0);
         b = i->at(1);
         if (a.distance < 0.75*b.distance) {
-            good_matches.push_back(a);
+            cv::Point s, t;
+            s = kp_s[a.queryIdx].pt;
+            t = kp_t[a.trainIdx].pt;
+            if (matches_duplicate(s.y, s.x) >= 0) {
+                if (a.distance < good_matches[matches_duplicate(s.y, s.x)].distance) {
+                    M_s[matches_duplicate(s.y,s.x)] = s;
+                    M_t[matches_duplicate(s.y,s.x)] = t;
+                    good_matches[matches_duplicate(s.y,s.x)] = a;
+                }
+            } else {
+                M_s.push_back(s);
+                M_t.push_back(t);
+                matches_duplicate(s.y, s.x) = (int)good_matches.size();
+                good_matches.push_back(a);
+            }
         }
     }
 
-    auto orient2D = [] (Eigen::Vector2d pa, Eigen::Vector2d pb, Eigen::Vector2d pc) {
+    typedef Eigen::MatrixXd::Scalar Scalar;
+
+    //auto orient2D = [] (Eigen::Scalar pa[2], Eigen::Scalar pb[2], Eigen::Scalar pc[2]) {
+    auto orient2D = [] (const Scalar pa[2], const Scalar pb[2], const Scalar pc[2]) {
+        std::cout << pa[0] << "\t" << pa[1] << std::endl;
+        std::cout << pb[0] << "\t" << pb[1] << std::endl;
+        std::cout << pc[0] << "\t" << pc[1] << std::endl;
+        std::cout << std::endl;
         Eigen::Vector3d a,b;
-        a << pa - pb, 0;
-        b << pc - pb, 0;
+        a << pa[0] - pb[0], pa[1] - pb[1], 0;
+        b << pc[0] - pb[0], pc[1] - pb[1], 0;
         double c = a.cross(b)(2);
         if (c> 0) {
             return 1;
@@ -239,11 +263,104 @@ Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, E
         }
     };
 
-    auto incircle = [] (Eigen::Vector2d pa, Eigen::Vector2d pb, Eigen::Vector2d pc, Eigen::Vector2d pd) {
-
-        return 0;
+    //auto incircle = [] (Eigen::Scalar pa[2], Eigen::Scalar pb[2], Eigen::Scalar pc[2], Eigen::Scalar pd[2]) {
+    auto incircle = [] (const Scalar pa[2], const Scalar pb[2], const Scalar pc[2], const Scalar pd[2]) {
+        Eigen::Matrix4d mat;
+        mat.col(0) << std::sqrt(pd[0]*pd[0]+pd[1]*pd[1]), std::sqrt(pa[0]*pa[0]+pa[1]*pa[1]),std::sqrt(pb[0]*pb[0]+pb[1]*pb[1]),std::sqrt(pc[0]*pc[0]+pc[1]*pc[1]);
+        mat.col(1) << pd[0], pa[0], pb[0], pc[0];
+        mat.col(2) << pd[1], pa[1], pb[1], pc[1];
+        mat.col(3) << 1,1,1,1;
+        double d = mat.determinant();
+        if (d > 0) {
+            return -1;
+        } else if (d < 0) {
+            return 1;
+        } else {
+            return 0;
+        }
     };
 
+    Eigen::MatrixXd V_S(M_s.size(),2), V_T(M_t.size(),2);
+    assert(V_S.rows() == V_T.rows());
+    for (int i=0; i<V_S.rows(); i++) {
+        V_S.row(i) << M_s[i].x, M_s[i].y;
+        V_T.row(i) << M_t[i].x, M_t[i].y;
+    }
+    //std::cout << "V_S: " << V_S << std::endl;
+    //std::cout << "V_T: " << V_T << std::endl;
+    //TODO FIX DELAUNAY TRIANGULATION FOR DUPLICATE POINTS
+    //igl::delaunay_triangulation(V_S, orient2D, incircle, F);
+    //std::cout << F << std::endl;
+    //Eigen::MatrixXd V_(V_S.rows(),3);
+    //V_.block(0,0,V_S.rows(),2) = V_S;
+    //igl::writeOFF("/home/parallels/Desktop/Parallels Shared Folders/Downloads/file.off", V_, F);
+    Eigen::MatrixXi F(65,3);
+    F << 24, 19, 12,
+            19, 18, 12,
+            15, 16, 14,
+            19, 17, 18,
+            34, 33, 35,
+            30, 21, 12,
+            9, 30, 10,
+            18, 13, 12,
+            13, 30, 12,
+            30, 13, 10,
+            37, 17, 19,
+            17, 37, 15,
+            15, 37, 16,
+            37, 19, 24,
+            23, 34, 35,
+            1, 3, 25,
+            33, 28, 35,
+            28, 22, 35,
+            22, 28, 4,
+            3, 20, 25,
+            20, 32, 25,
+            32, 31, 4,
+            31, 20, 3,
+            20, 31, 32,
+            11, 9, 10,
+            11, 23, 35,
+            13, 11, 10,
+            11, 13, 18,
+            23, 11, 18,
+            30, 29, 21,
+            9, 29, 30,
+            23, 7, 34,
+            17, 7, 18,
+            7, 23, 18,
+            7, 15, 14,
+            7, 17, 15,
+            21, 2, 0,
+            2, 1, 0,
+            27, 32, 4,
+            28, 27, 4,
+            32, 27, 33,
+            27, 28, 33,
+            5, 29, 9,
+            11, 5, 9,
+            5, 26, 21,
+            29, 5, 21,
+            5, 11, 35,
+            26, 5, 35,
+            7, 6, 34,
+            34, 6, 33,
+            6, 32, 33,
+            6, 7, 14,
+            25, 6, 14,
+            32, 6, 25,
+            36, 2, 21,
+            36, 22, 4,
+            31, 36, 4,
+            36, 31, 3,
+            1, 36, 3,
+            2, 36, 1,
+            26, 8, 21,
+            8, 36, 21,
+            36, 8, 22,
+            22, 8, 35,
+            8, 26, 35;
+    /*
     cv::Mat image_matches;
     cv::drawMatches(image_s, kp_s, image_t, kp_t, good_matches, image_matches);
 
@@ -251,5 +368,37 @@ Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, E
     cv::imshow("Display Image", image_matches);
 
     cv::waitKey(0);
+     */
+    std::vector<int> valid_triangles;
+    for (int i=0; i<F.rows(); i++) {
+        Eigen::RowVector3d a,b;
+        a << V_T.row(F(i,0)) - V_T.row(F(i,1)) , 0;
+        b << V_T.row(F(i,2)) - V_T.row(F(i,1)) , 0;
+        if (a.cross(b)(2) > 0) {
+            valid_triangles.push_back(i);
+        }
+    }
+    Eigen::Map<Eigen::VectorXi> valid_t(valid_triangles.data(), valid_triangles.size());
+    Eigen::MatrixXi F_valid;
+    igl::slice(F, valid_t, 1, F_valid);
+
+    std::cout << F_valid << std::endl;
+    std::vector<Eigen::MatrixXd> piecewise_affine;
+    for (auto i=0; i<F_valid.rows(); i++) {
+        Eigen::MatrixXd t(3,3), t_(2,3);
+        Eigen::VectorXd a(3), b(2);
+        for (int j=0; j<3; j++) {
+            a << V_S(F_valid(i,j),0), V_S(F_valid(i,j),1), 1;
+            b << V_T(F_valid(i,j),0), V_T(F_valid(i,j),1);
+            t.col(j) = a;
+            t_.col(j) = b;
+        }
+        piecewise_affine.push_back(t_ * t.inverse());
+    }
+
+    cv::Mat A;
+    A = cv::findHomography(M_s, M_t, CV_RANSAC);
+    std::cout << A << std::endl;
+
 
 }

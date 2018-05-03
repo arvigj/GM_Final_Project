@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
     roi = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE );
 
     //bbw(source, roi, 10);
-    transformations(source, target, roi, Eigen::MatrixXd(0,0));
+    transformations(source, target, roi, Eigen::MatrixXd(1,1));
     if ( !source.data )
     {
         printf("No image data \n");
