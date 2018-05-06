@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 
 #include "content_aware_bbw.h"
+#include "mapping.h"
 
 using namespace cv;
 
@@ -21,6 +22,8 @@ int main(int argc, char** argv) {
 
     //bbw(source, roi, 10);
     transformations(source, target, roi, Eigen::MatrixXd(1,1));
+    //test_meshing();
+    /*
     if ( !source.data )
     {
         printf("No image data \n");
@@ -30,6 +33,7 @@ int main(int argc, char** argv) {
     imshow("Display Image", source);
 
     waitKey(0);
+     */
 
     return 0;
 }

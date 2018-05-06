@@ -4,6 +4,97 @@
 
 #include "content_aware_bbw.h"
 
+
+void test_meshing() {
+    Eigen::MatrixXi roi_matrix(20,10), x(20,10), y(20,10);
+    roi_matrix = Eigen::MatrixXi::Zero(20,10);
+    x = Eigen::MatrixXi::Zero(20,10);
+    y = Eigen::MatrixXi::Zero(20,10);
+    roi_matrix.array() += 1;
+
+    for (int i=0; i<roi_matrix.rows(); i++) {
+        y.row(i).array() += i;
+    }
+
+    for (int i=0; i<roi_matrix.cols(); i++) {
+        x.col(i).array() += i;
+    }
+
+    Eigen::Map<Eigen::VectorXi> x_vec(x.data(),x.size());
+    Eigen::Map<Eigen::VectorXi> y_vec(y.data(),y.size());
+
+    Eigen::MatrixXi coords(200,3);
+    coords.col(0) << x_vec;
+    coords.col(1) << y_vec;
+    coords.col(2) << Eigen::VectorXi::Zero(x_vec.size());
+
+
+    std::vector<Eigen::RowVector3i> faces;
+    Eigen::Matrix2i small(2,2);
+    int index[3];
+    for (int j=0; j<roi_matrix.cols()-1; j++) {
+        for (int i=0; i<roi_matrix.rows()-1; i++) {
+            small = roi_matrix.block(i,j,2,2);
+            switch(small.sum()) {
+                case 3:
+                    if (small(0,0) == 0) {
+                        index[0] = (j+1)*roi_matrix.rows() + i;
+                        index[1] = j*roi_matrix.rows() + (i+1);
+                        index[2] = (j+1)*roi_matrix.rows() + (i+1);
+                        faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    } else if (small(1,0) == 0) {
+                        index[0] = j*roi_matrix.rows() + i;
+                        index[1] = j*roi_matrix.rows() + (i+1);
+                        index[2] = (j+1)*roi_matrix.rows() + (i+1);
+                        faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    } else if (small(1,0) == 0) {
+                        index[0] = (j+1)*roi_matrix.rows() + i;
+                        index[1] = j*roi_matrix.rows() + i;
+                        index[2] = (j+1)*roi_matrix.rows() + (i+1);
+                        faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    } else if (small(1,0) == 0) {
+                        index[0] = j*roi_matrix.rows() + i;
+                        index[1] = j*roi_matrix.rows() + (i+1);
+                        index[2] = (j+1)*roi_matrix.rows() + i;
+                        faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    } else {
+                        std::cout << "SOMETHING IS GOING WRONG WITH MESH GENERATION" << std::endl;
+                    }
+                    break;
+                case 4:
+                    index[0] = j*roi_matrix.rows() + i;
+                    index[1] = j*roi_matrix.rows() + (i+1);
+                    index[2] = (j+1)*roi_matrix.rows() + i;
+                    faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    index[0] = (j+1)*roi_matrix.rows() + (i+1);
+                    faces.push_back(Eigen::RowVector3i(index[2],index[1],index[0]));
+                    break;
+                default:
+                    break;
+            }
+
+        }
+    }
+
+    Eigen::MatrixXi F(faces.size(), 3);
+    for (int i=0; i<faces.size(); i++) {
+        F.row(i) << faces[i];
+    }
+
+    std::cout << x << std::endl;
+    std::cout << y << std::endl;
+    std::cout << "Coordinates are " << std::endl;
+    std::cout << coords << std::endl;
+    std::cout << "Faces are " << std::endl;
+    std::cout << F << std::endl;
+
+    //igl::opengl::glfw::Viewer viewer;
+    //viewer.data().set_mesh(coords.cast<double>(), F);
+    //viewer.core.align_camera_center(coords.cast<double>(), F);
+    //viewer.launch();
+}
+
+
 /*
  * Parameters: Mesh defined by V, F
  */
@@ -145,7 +236,9 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     for (auto i=H.begin(); i!=H.end(); i++) {
         std::cout << *i << std::endl;
     }
-    Eigen::MatrixXi roi_matrix(roi.rows,roi.cols), x_coords(roi.rows,roi.cols), y_coords(roi.rows,roi.cols);
+    Eigen::MatrixXi roi_matrix, x_coords, y_coords;
+    x_coords = Eigen::MatrixXi::Zero(roi.rows,roi.cols);
+    y_coords = Eigen::MatrixXi::Zero(roi.rows,roi.cols);
     for (int i=0; i<roi.rows; i++) {
         y_coords.row(i).array() += i;
     }
@@ -244,8 +337,8 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     Eigen::SparseMatrix<double> Q;
     Q = lm.first * lm.second.diagonal().asDiagonal().inverse() * lm.first;
     //igl::opengl::glfw::Viewer viewer;
-    //viewer.data().set_mesh(coords.cast<double>(), F);
-    //viewer.core.align_camera_center(coords.cast<double>(), F);
+    //viewer.data().set_mesh(coords.block(0,0,coords.rows(),3).cast<double>(), F);
+    //viewer.core.align_camera_center(coords.block(0,0,coords.rows(),3).cast<double>(), F);
     //viewer.launch();
     //igl::writeOFF("file.off",coords,F);
 
@@ -388,9 +481,9 @@ Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, E
     //TODO FIX DELAUNAY TRIANGULATION FOR DUPLICATE POINTS
     //igl::delaunay_triangulation(V_S, orient2D, incircle, F);
     Eigen::MatrixXi F_;
-    igl::copyleft::cgal::delaunay_triangulation(V_S, F_);
+    //igl::copyleft::cgal::delaunay_triangulation(V_S, F_);
     std::cout << F_ << std::endl;
-    return Eigen::MatrixXd(0,0);
+    //return Eigen::MatrixXd(0,0);
     //Eigen::MatrixXd V_(V_S.rows(),3);
     //V_.block(0,0,V_S.rows(),2) = V_S;
     //igl::writeOFF("/home/parallels/Desktop/Parallels Shared Folders/Downloads/file.off", V_, F);
