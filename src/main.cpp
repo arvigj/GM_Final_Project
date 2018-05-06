@@ -19,8 +19,8 @@ int main(int argc, char** argv) {
     target = imread( argv[3], CV_LOAD_IMAGE_COLOR );
     roi = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE );
 
-    //bbw(source, roi, 10);
-    transformations(source, target, roi, Eigen::MatrixXd(1,1));
+    bbw(source, roi, 10);
+    //transformations(source, target, roi, Eigen::MatrixXd(1,1));
     if ( !source.data )
     {
         printf("No image data \n");

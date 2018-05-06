@@ -17,8 +17,10 @@
 //#include <opencv2/nonfree/features2d.hpp>
 #include <opencv2/nonfree/nonfree.hpp>
 //#include <igl/triangle/triangulate.h>
+//#include <igl/opengl/glfw/Viewer.h>
+#include <igl/mosek/mosek_quadprog.h>
 
-std::pair<Eigen::MatrixXd, Eigen::MatrixXd> LM(Eigen::MatrixXd mesh);
+std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::MatrixXd mesh);
 Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m);
 cv::Mat gaussian(cv::Size size, cv::Point center, double sigma);
 Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, Eigen::MatrixXd w);

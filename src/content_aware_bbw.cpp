@@ -7,12 +7,13 @@
 /*
  * Parameters: Mesh defined by V, F
  */
-std::pair<Eigen::MatrixXd, Eigen::MatrixXd> LM(Eigen::MatrixXd V, Eigen::MatrixXd F) {
-    Eigen::MatrixXd L(F.rows(),F.rows()), M(F.rows(),F.rows());
+std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::MatrixXd V, Eigen::MatrixXi F) {
+    Eigen::SparseMatrix<double> L(F.rows(),F.rows()), M(F.rows(),F.rows());
+    std::vector<Eigen::Triplet<double>> L_tripets, M_triplets;
     for (int i=0; i<F.rows(); i++) {
         Eigen::Vector3d l, cot;
         double r, A;
-        l << V.row(F(i,0)) - V.row(F(i,1)), V.row(F(i,1)) - V.row(F(i,2)), V.row(F(i,2)) - V.row(F(i,0));
+        l << (V.row(F(i,0)) - V.row(F(i,1))).norm(), (V.row(F(i,1)) - V.row(F(i,2))).norm(), (V.row(F(i,2)) - V.row(F(i,0))).norm();
         r = 0.5*l.sum();
         A = std::sqrt(r*(r-l(0))*(r-l(1))*(r-l(2)));
         cot = (Eigen::Matrix3d::Ones()-2*Eigen::Matrix3d::Identity()) * l.array().square().matrix();
@@ -24,18 +25,28 @@ std::pair<Eigen::MatrixXd, Eigen::MatrixXd> LM(Eigen::MatrixXd V, Eigen::MatrixX
         auto index_ab = precomputed_ab.begin();
         auto index_bc = precomputed_bc.begin();
         do{
-            L(ijk[0],ijk[1]) -= 0.5 * cot(*index_ab);
-            L(ijk[0],ijk[0]) += 0.5 * cot(*index_ab);
+            //L(ijk[0],ijk[1]) -= 0.5 * cot(*index_ab);
+            //L(ijk[0],ijk[0]) += 0.5 * cot(*index_ab);
+            L_tripets.push_back(Eigen::Triplet<double>(ijk[0], ijk[1], -0.5 * cot(*index_ab)));
+            L_tripets.push_back(Eigen::Triplet<double>(ijk[0], ijk[0], 0.5 * cot(*index_ab)));
             if((cot.array() >= 0).all()) {
-                M(ijk[0],ijk[0]) += (1./8.)*cot(*index_ab)*cot(*index_ab)*l(*index_ab);
+                //M(ijk[0],ijk[0]) += (1./8.)*cot(*index_ab)*cot(*index_ab)*l(*index_ab);
+                M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./8.)*cot(*index_ab)*cot(*index_ab)*l(*index_ab)));
             } else {
-                M(ijk[0],ijk[0]) += (1./8.)*A ? cot(*index_bc) >= 0 : (1./4.)*A;
+                //M(ijk[0],ijk[0]) += (1./8.)*A ? cot(*index_bc) >= 0 : (1./4.)*A;
+                if (cot(*index_bc) >= 0) {
+                    M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./8.)*A));
+                } else {
+                    M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./4.)*A));
+                }
             }
             index_ab++;
             index_bc++;
         } while (std::next_permutation(ijk.begin(),ijk.end()));
     }
-    return std::pair<Eigen::MatrixXd, Eigen::MatrixXd>(L,M);
+    L.setFromTriplets(L_tripets.begin(),L_tripets.end());
+    M.setFromTriplets(M_triplets.begin(),M_triplets.end());
+    return std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>>(L,M);
 };
 
 Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
@@ -134,7 +145,7 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     for (auto i=H.begin(); i!=H.end(); i++) {
         std::cout << *i << std::endl;
     }
-    Eigen::MatrixXd roi_matrix(roi.rows,roi.cols), x_coords(roi.rows,roi.cols), y_coords(roi.rows,roi.cols);
+    Eigen::MatrixXi roi_matrix(roi.rows,roi.cols), x_coords(roi.rows,roi.cols), y_coords(roi.rows,roi.cols);
     for (int i=0; i<roi.rows; i++) {
         y_coords.row(i).array() += i;
     }
@@ -142,17 +153,103 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
         x_coords.col(i).array() += i;
     }
     cv::cv2eigen(roi>0, roi_matrix);
-    Eigen::Map<Eigen::VectorXd> roi_vec(roi_matrix.data(), roi_matrix.size());
-    Eigen::Map<Eigen::VectorXd> x_vec(x_coords.data(), x_coords.size());
-    Eigen::Map<Eigen::VectorXd> y_vec(y_coords.data(), y_coords.size());
-    Eigen::VectorXd scalar_field(roi_vec.size());
-    Eigen::MatrixXd coords(roi_matrix.size(), 3), V;
-    Eigen::MatrixXi F;
+    roi_matrix /= 255;
+    Eigen::Map<Eigen::VectorXi> roi_vec(roi_matrix.data(), roi_matrix.size());
+    Eigen::Map<Eigen::VectorXi> x_vec(x_coords.data(), x_coords.size());
+    Eigen::Map<Eigen::VectorXi> y_vec(y_coords.data(), y_coords.size());
+    Eigen::VectorXi scalar_field(roi_vec.size());
+    Eigen::MatrixXi coords(roi_matrix.size(), 3), V;
     scalar_field << roi_vec;
-    scalar_field /= 255;
     coords.col(0) << x_vec;
     coords.col(1) << y_vec;
-    coords.col(2) << Eigen::VectorXd(roi_matrix.size());
+    coords.col(2) << Eigen::VectorXi::Zero(roi_matrix.size());
+
+
+    //HERE DO THE MESH TRIANGULATION
+    std::vector<Eigen::RowVector3i> faces;
+    Eigen::Matrix2i small(2,2);
+    int index[3];
+    for (int j=0; j<roi.cols-1; j++) {
+        for (int i=0; i<roi.rows-1; i++) {
+            small = roi_matrix.block(i,j,2,2);
+            switch(small.sum()) {
+                case 3:
+                    if (small(0,0) == 0) {
+                        index[0] = (j+1)*roi_matrix.rows() + i;
+                        index[1] = j*roi_matrix.rows() + (i+1);
+                        index[2] = (j+1)*roi_matrix.rows() + (i+1);
+                        faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    } else if (small(1,0) == 0) {
+                        index[0] = j*roi_matrix.rows() + i;
+                        index[1] = j*roi_matrix.rows() + (i+1);
+                        index[2] = (j+1)*roi_matrix.rows() + (i+1);
+                        faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    } else if (small(1,0) == 0) {
+                        index[0] = (j+1)*roi_matrix.rows() + i;
+                        index[1] = j*roi_matrix.rows() + i;
+                        index[2] = (j+1)*roi_matrix.rows() + (i+1);
+                        faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    } else if (small(1,0) == 0) {
+                        index[0] = j*roi_matrix.rows() + i;
+                        index[1] = j*roi_matrix.rows() + (i+1);
+                        index[2] = (j+1)*roi_matrix.rows() + i;
+                        faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    } else {
+                        std::cout << "SOMETHING IS GOING WRONG WITH MESH GENERATION" << std::endl;
+                    }
+                    break;
+                case 4:
+                    index[0] = j*roi_matrix.rows() + i;
+                    index[1] = j*roi_matrix.rows() + (i+1);
+                    index[2] = (j+1)*roi_matrix.rows() + i;
+                    faces.push_back(Eigen::RowVector3i(index[0],index[1],index[2]));
+                    index[0] = (j+1)*roi_matrix.rows() + (i+1);
+                    faces.push_back(Eigen::RowVector3i(index[2],index[1],index[0]));
+                    break;
+                default:
+                    break;
+            }
+
+        }
+    }
+
+    Eigen::MatrixXi F(faces.size(), 3);
+    for (int i=0; i<faces.size(); i++) {
+        F.row(i) << faces[i];
+        Eigen::Vector3d a,b;
+        a = coords.row(faces[i](0)).cast<double>() - coords.row(faces[i](1)).cast<double>();
+        b = coords.row(faces[i](2)).cast<double>() - coords.row(faces[i](1)).cast<double>();
+        coords.row(faces[i](0));
+        coords.row(faces[i](1));
+        coords.row(faces[i](2));
+        //std::cout << 0.5*(a.cross(b).norm()) << std::endl;
+    }
+
+
+    std::vector<cv::Mat> channels;
+    Eigen::MatrixXi L, A, B;
+    cv::split(image_LAB, channels);
+    cv::cv2eigen(channels[0], L);
+    cv::cv2eigen(channels[1], A);
+    cv::cv2eigen(channels[2], B);
+    Eigen::Map<Eigen::VectorXi> L_vec(L.data(),L.size());
+    Eigen::Map<Eigen::VectorXi> A_vec(A.data(),A.size());
+    Eigen::Map<Eigen::VectorXi> B_vec(B.data(),B.size());
+    coords.conservativeResize(coords.rows(), 5);
+    coords.col(2) << 16 * L_vec;
+    coords.col(3) << 16 * A_vec;
+    coords.col(4) << 16 * B_vec;
+
+    auto lm = LM(coords.cast<double>(),F);
+    Eigen::SparseMatrix<double> Q;
+    Q = lm.first * lm.second.diagonal().asDiagonal().inverse() * lm.first;
+    //igl::opengl::glfw::Viewer viewer;
+    //viewer.data().set_mesh(coords.cast<double>(), F);
+    //viewer.core.align_camera_center(coords.cast<double>(), F);
+    //viewer.launch();
+    //igl::writeOFF("file.off",coords,F);
+
+
     //igl::copyleft::marching_cubes(scalar_field, coords, roi.cols, roi.rows, 4, V, F);
     //igl::writeOFF("file.off", V, F);
     /*
