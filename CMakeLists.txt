@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 project(ex5)
 
-set(ENV{CGAL_DIR} "/usr/local/Cellar/cgal/4.12")
+set(ENV{CGAL_DIR} "/usr/local/Cellar/cgal/4.12/lib/cmake/CGAL")
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -11,7 +11,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # libigl
 option(LIBIGL_USE_STATIC_LIBRARY "Use libigl as static library" OFF)
 option(LIBIGL_WITH_ANTTWEAKBAR       "Use AntTweakBar"    OFF)
-option(LIBIGL_WITH_CGAL              "Use CGAL"           OFF)
+option(LIBIGL_WITH_CGAL              "Use CGAL"           ON)
 option(LIBIGL_WITH_COMISO            "Use CoMiso"         OFF)
 option(LIBIGL_WITH_CORK              "Use Cork"           OFF)
 option(LIBIGL_WITH_EMBREE            "Use Embree"         OFF)

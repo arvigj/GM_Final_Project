@@ -387,7 +387,10 @@ Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, E
     //std::cout << "V_T: " << V_T << std::endl;
     //TODO FIX DELAUNAY TRIANGULATION FOR DUPLICATE POINTS
     //igl::delaunay_triangulation(V_S, orient2D, incircle, F);
-    //std::cout << F << std::endl;
+    Eigen::MatrixXi F_;
+    igl::copyleft::cgal::delaunay_triangulation(V_S, F_);
+    std::cout << F_ << std::endl;
+    return Eigen::MatrixXd(0,0);
     //Eigen::MatrixXd V_(V_S.rows(),3);
     //V_.block(0,0,V_S.rows(),2) = V_S;
     //igl::writeOFF("/home/parallels/Desktop/Parallels Shared Folders/Downloads/file.off", V_, F);

@@ -8,7 +8,7 @@
 #include <Eigen/Core>
 #include <stdlib.h>
 #include <opencv2/opencv.hpp>
-#include <igl/delaunay_triangulation.h>
+#include <igl/copyleft/cgal/delaunay_triangulation.h>
 #include <opencv2/core/eigen.hpp>
 #include <igl/writeOFF.h>
 #include <igl/slice.h>
