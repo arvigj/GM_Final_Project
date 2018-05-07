@@ -27,12 +27,10 @@ option(LIBIGL_WITH_VIEWER            "Use OpenGL viewer"  ON)
 option(LIBIGL_WITH_XML               "Use XML"            OFF)
 
 find_package(LIBIGL REQUIRED QUIET)
-find_package(CGAL REQUIRED)
-find_package(MOSEK REQUIRED)
 
 find_package( OpenCV REQUIRED )
 
 # Add your project files
 file(GLOB SRCFILES src/main.cpp)
 add_executable(${PROJECT_NAME}_bin ${SRCFILES} src/content_aware_bbw.h src/content_aware_bbw.cpp src/mapping.cpp src/mapping.h)
-target_link_libraries(${PROJECT_NAME}_bin igl::core igl::opengl_glfw igl::opengl_glfw_imgui ${OpenCV_LIBS})
+target_link_libraries(${PROJECT_NAME}_bin igl::cgal igl::mosek igl::core igl::opengl_glfw igl::opengl_glfw_imgui ${OpenCV_LIBS})
