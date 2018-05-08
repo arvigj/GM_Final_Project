@@ -18,6 +18,8 @@
 #include <opencv2/nonfree/nonfree.hpp>
 //#include <igl/opengl/glfw/Viewer.h>
 #include <igl/mosek/mosek_quadprog.h>
+#include <Eigen/SparseCholesky>
+#include <igl/remove_unreferenced.h>
 
 std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::MatrixXd mesh);
 Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m);

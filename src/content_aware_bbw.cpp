@@ -100,43 +100,92 @@ void test_meshing() {
  */
 std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::MatrixXd V, Eigen::MatrixXi F) {
     Eigen::SparseMatrix<double> L(V.rows(),V.rows()), M(V.rows(),V.rows());
-    std::vector<Eigen::Triplet<double>> L_tripets, M_triplets;
+    std::vector<Eigen::Triplet<double>> L_triplets, M_triplets;
+    //First of all need to populate L and M in order to later change the elements of them
+    for (int i=0; i<F.rows(); i++) {
+        std::vector<int> ijk(F.row(i).data(), F.row(i).data() + F.row(i).size());
+        do{
+            L_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[1],0));
+            L_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],0));
+            M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],0));
+        } while (std::next_permutation(ijk.begin(),ijk.end()));
+    }
+    L.reserve(L_triplets.size());
+    M.reserve(M_triplets.size());
+    L.setFromTriplets(L_triplets.begin(),L_triplets.end());
+    M.setFromTriplets(M_triplets.begin(),M_triplets.end());
+    assert(L.sum() == 0);
+    assert(M.sum() == 0);
     for (int i=0; i<F.rows(); i++) {
         Eigen::Vector3d l, cot;
         double r, A;
         l << (V.row(F(i,0)) - V.row(F(i,1))).norm(), (V.row(F(i,1)) - V.row(F(i,2))).norm(), (V.row(F(i,2)) - V.row(F(i,0))).norm();
         r = 0.5*l.sum();
         A = std::sqrt(r*(r-l(0))*(r-l(1))*(r-l(2)));
-        cot = (Eigen::Matrix3d::Ones()-2*Eigen::Matrix3d::Identity()) * l.array().square().matrix();
+        Eigen::Matrix3d mul;
+        mul << -1,1,1,
+                1,-1,1,
+                1,1,-1;
+        cot = mul * l.array().square().matrix();
         cot /= A;
+        cot *= .25;
+
+        assert(A > 0);
 
         std::vector<int> ijk(F.row(i).data(), F.row(i).data() + F.row(i).size());
         std::vector<int> precomputed_ab = {0,2,0,1,2,1};
         std::vector<int> precomputed_bc = {1,1,2,2,0,0};
         auto index_ab = precomputed_ab.begin();
         auto index_bc = precomputed_bc.begin();
+        int ab_index, bc_index;
         do{
-            //L(ijk[0],ijk[1]) -= 0.5 * cot(*index_ab);
-            //L(ijk[0],ijk[0]) += 0.5 * cot(*index_ab);
-            L_tripets.push_back(Eigen::Triplet<double>(ijk[0], ijk[1], -0.5 * cot(*index_ab)));
-            L_tripets.push_back(Eigen::Triplet<double>(ijk[0], ijk[0], 0.5 * cot(*index_ab)));
-            if((cot.array() >= 0).all()) {
-                //M(ijk[0],ijk[0]) += (1./8.)*cot(*index_ab)*cot(*index_ab)*l(*index_ab);
-                M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./8.)*cot(*index_ab)*cot(*index_ab)*l(*index_ab)));
+            if ((ijk[0] == 0 && ijk[1]==1) || (ijk[0] == 0 && ijk[1]==1)) {
+                ab_index = 0;
+            } else if ((ijk[0] == 0 && ijk[1]==2) || (ijk[0] == 2 && ijk[1]==0)) {
+                ab_index = 2;
             } else {
-                //M(ijk[0],ijk[0]) += (1./8.)*A ? cot(*index_bc) >= 0 : (1./4.)*A;
+                ab_index = 1;
+            }
+            if ((ijk[1] == 0 && ijk[2]==1) || (ijk[1] == 0 && ijk[2]==1)) {
+                ab_index = 0;
+            } else if ((ijk[1] == 0 && ijk[2]==2) || (ijk[1] == 2 && ijk[2]==0)) {
+                ab_index = 2;
+            } else {
+                ab_index = 1;
+            }
+            L.coeffRef(ijk[0],ijk[1]) += 0.5 * cot(ab_index);
+            L.coeffRef(ijk[0],ijk[0]) -= 0.5 * cot(ab_index);
+            //L.coeffRef(ijk[0],ijk[1]) -= 0.5 * cot(*index_ab);
+            //L.coeffRef(ijk[0],ijk[0]) += 0.5 * cot(*index_ab);
+            //L_triplets.push_back(Eigen::Triplet<double>(ijk[0], ijk[1], -0.5 * cot(*index_ab)));
+            //L_triplets.push_back(Eigen::Triplet<double>(ijk[0], ijk[0], 0.5 * cot(*index_ab)));
+            if((cot.array() >= 0).all()) {
+                M.coeffRef(ijk[0],ijk[0]) += (1./8.)*cot(ab_index)*std::pow(l(ab_index),2);
+                //M.coeffRef(ijk[0],ijk[0]) += (1./8.)*cot(*index_ab)*l(*index_ab)*l(*index_ab);
+                //M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./8.)*cot(*index_ab)*cot(*index_ab)*l(*index_ab)));
+            } else {
+                M.coeffRef(ijk[0],ijk[0]) += (1./8.)*A ? cot(bc_index) >= 0 : (1./4.)*A;
+                //M.coeffRef(ijk[0],ijk[0]) += (1./8.)*A ? cot(*index_bc) >= 0 : (1./4.)*A;
+                /*
                 if (cot(*index_bc) >= 0) {
                     M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./8.)*A));
                 } else {
                     M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./4.)*A));
                 }
+                 */
             }
+            /*
+            if (M.coeff(ijk[0],ijk[0]) == 0 || M.coeff(ijk[1],ijk[1]) == 0 || M.coeff(ijk[2],ijk[2]) == 0) {
+                std::cout << A << std::endl;
+                std::cout << l << std::endl;
+                std::cout << cot << std::endl;
+                throw std::runtime_error("Zero in weight matrix");
+            }
+             */
             index_ab++;
             index_bc++;
         } while (std::next_permutation(ijk.begin(),ijk.end()));
     }
-    L.setFromTriplets(L_tripets.begin(),L_tripets.end());
-    M.setFromTriplets(M_triplets.begin(),M_triplets.end());
     return std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>>(L,M);
 };
 
@@ -251,7 +300,7 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     Eigen::Map<Eigen::VectorXi> x_vec(x_coords.data(), x_coords.size());
     Eigen::Map<Eigen::VectorXi> y_vec(y_coords.data(), y_coords.size());
     Eigen::VectorXi scalar_field(roi_vec.size());
-    Eigen::MatrixXi coords(roi_matrix.size(), 3), V;
+    Eigen::MatrixXi coords(roi_matrix.size(), 3);
     scalar_field << roi_vec;
     coords.col(0) << x_vec;
     coords.col(1) << y_vec;
@@ -306,9 +355,9 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
         }
     }
 
-    Eigen::MatrixXi F(faces.size(), 3);
+    Eigen::MatrixXi F_(faces.size(), 3);
     for (int i=0; i<faces.size(); i++) {
-        F.row(i) << faces[i];
+        F_.row(i) << faces[i];
         Eigen::Vector3d a,b;
         a = coords.row(faces[i](0)).cast<double>() - coords.row(faces[i](1)).cast<double>();
         b = coords.row(faces[i](2)).cast<double>() - coords.row(faces[i](1)).cast<double>();
@@ -317,6 +366,10 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
         coords.row(faces[i](2));
         //std::cout << 0.5*(a.cross(b).norm()) << std::endl;
     }
+
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F, IM;
+    igl::remove_unreferenced(coords.cast<double>(), F_, V, F, IM);
 
 
     std::vector<cv::Mat> channels;
@@ -328,28 +381,73 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     Eigen::Map<Eigen::VectorXi> L_vec(L.data(),L.size());
     Eigen::Map<Eigen::VectorXi> A_vec(A.data(),A.size());
     Eigen::Map<Eigen::VectorXi> B_vec(B.data(),B.size());
-    coords.conservativeResize(coords.rows(), 5);
-    coords.col(2) << 16 * L_vec;
-    coords.col(3) << 16 * A_vec;
-    coords.col(4) << 16 * B_vec;
+    Eigen::VectorXi L_vec_incl, A_vec_incl, B_vec_incl;
+    igl::slice(L_vec, V.col(0).cast<int>() + image_LAB.rows*V.col(1).cast<int>(), 1, L_vec_incl);
+    igl::slice(A_vec, V.col(0).cast<int>() + image_LAB.rows*V.col(1).cast<int>(), 1, A_vec_incl);
+    igl::slice(B_vec, V.col(0).cast<int>() + image_LAB.rows*V.col(1).cast<int>(), 1, B_vec_incl);
+    std::cout << V.rows() << std::endl;
+    std::cout << L_vec_incl.size() << std::endl;
+    std::cout << A_vec_incl.size() << std::endl;
+    std::cout << B_vec_incl.size() << std::endl;
+    V.conservativeResize(V.rows(), 5);
+    V.col(2) << 0 * L_vec_incl.cast<double>()/255.;
+    V.col(3) << 0 * A_vec_incl.cast<double>()/255.;
+    V.col(4) << 0 * B_vec_incl.cast<double>()/255.;
 
-    auto lm = LM(coords.cast<double>(),F);
-    Eigen::SparseMatrix<double> Q;
+
+    /*
+    igl::opengl::glfw::Viewer viewer;
+    viewer.data().set_mesh(V.block(0,0,V.rows(),3), F);
+    viewer.core.align_camera_center(V.block(0,0,V.rows(),3), F);
+    viewer.launch();
+     */
+
+    auto lm = LM(V,F);
+    /*
+    Eigen::SparseMatrix<double> weight_inv;
+    lm.second.diagonal().asDiagonal().inverse().evalTo(weight_inv);
+
+    for(int k=0; k<weight_inv.outerSize(); k++) {
+        for(Eigen::SparseMatrix<double>::InnerIterator it(weight_inv,k); it; ++it) {
+            weight_inv.coeffRef(it.row(),it.col()) = 0 ? isnan(weight_inv.coeffRef(it.row(),it.col())) : weight_inv.coeffRef(it.row(),it.col());
+        }
+    }
+
+     */
+    Eigen::SparseMatrix<double> Q(V.rows(),V.rows());
     Q = lm.first * lm.second.diagonal().asDiagonal().inverse() * lm.first;
+    //Q = lm.first * lm.first;
+    //Check if positive semi definite
+    /*
+    Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> lltOfA(Q);
+    if (lltOfA.info() == Eigen::NumericalIssue) {
+        throw std::runtime_error("Possibly non PSD matrix");
+    }
+     */
+    /*
+    for(int k=0; k<Q.outerSize(); k++) {
+        for(Eigen::SparseMatrix<double>::InnerIterator it(Q,k); it; ++it) {
+            std::cout << it.row() << " " << it.col() << " " << Q.coeff(it.row(), it.col()) << std::endl;
+        }
+    }
+    */
+    std::cout << lm.second.diagonal() << std::endl;
 
     std::vector<Eigen::Triplet<double >> w_h;
-    Eigen::SparseMatrix<double> constraints(H.size(), Q.rows());
-    constraints.reserve(H.size());
+    Eigen::SparseMatrix<double> constraints(1, Q.rows());
+    constraints.reserve(1);
     std::cout << Q.rows() << std::endl;
     std::cout << image.rows * image.cols << std::endl;
-    for (int i=0; i<H.size(); i++) {
-        w_h.push_back(Eigen::Triplet<double>(i, H[i].x+(image.rows*H[i].y), 1.));
+    for (int i=0; i<1; i++) {
+        w_h.push_back(Eigen::Triplet<double>(0,10000,1.));
+        //w_h.push_back(Eigen::Triplet<double>(i, H[i].x+(image.rows*H[i].y), 1.));
     }
     constraints.setFromTriplets(w_h.begin(), w_h.end());
     Eigen::VectorXd v;
     igl::mosek::MosekData mosek_data;
+    //mosek_data.iparam[MSK_IPAR_CHECK_CONVEXITY] = MSK_CHECK_CONVEXITY_NONE;
     //TODO try solving this multiple times for each handle
-    //igl::mosek::mosek_quadprog(Q, Eigen::VectorXd::Zero(Q.rows()), 0, constraints, Eigen::VectorXd::Ones(H.size()), Eigen::VectorXd::Ones(H.size()), Eigen::VectorXd::Zero(Q.rows()), Eigen::VectorXd::Ones(Q.rows()), mosek_data, v);
+    igl::mosek::mosek_quadprog(Q, Eigen::VectorXd::Zero(Q.rows()), 0, constraints, Eigen::VectorXd::Ones(1), Eigen::VectorXd::Ones(1), Eigen::VectorXd::Zero(Q.rows()), Eigen::VectorXd::Ones(Q.rows()), mosek_data, v);
 
 
 

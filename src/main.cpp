@@ -21,8 +21,8 @@ int main(int argc, char** argv) {
     roi = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE );
 
     std::cout << CV_MAJOR_VERSION << "." << CV_MINOR_VERSION << std::endl;
-    //bbw(source, roi, 10);
-    transformations(source, target, roi, Eigen::MatrixXd(source.rows*source.cols,5));
+    bbw(source, roi, 10);
+    //transformations(source, target, roi, Eigen::MatrixXd(source.rows*source.cols,5));
     //mapping(source, target, Eigen::MatrixXd(source.rows*source.cols,5), Eigen::MatrixXd(1,6));
     //test_meshing();
     /*
