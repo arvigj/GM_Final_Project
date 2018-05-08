@@ -20,6 +20,7 @@
 #include <igl/mosek/mosek_quadprog.h>
 #include <Eigen/SparseCholesky>
 #include <igl/remove_unreferenced.h>
+#include <igl/colon.h>
 
 std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::MatrixXd mesh);
 Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m);
