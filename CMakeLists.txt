@@ -2,9 +2,10 @@ cmake_minimum_required(VERSION 3.1)
 project(ex5)
 
 
-
 # libigl
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+#find_package(MOSEK)
 
 # libigl
 option(LIBIGL_USE_STATIC_LIBRARY "Use libigl as static library" OFF)
@@ -28,9 +29,10 @@ option(LIBIGL_WITH_XML               "Use XML"            OFF)
 
 find_package(LIBIGL REQUIRED QUIET)
 
-find_package( OpenCV REQUIRED )
+find_package( OpenCV REQUIRED)
 
 # Add your project files
 file(GLOB SRCFILES src/main.cpp)
 add_executable(${PROJECT_NAME}_bin ${SRCFILES} src/content_aware_bbw.h src/content_aware_bbw.cpp src/mapping.cpp src/mapping.h)
-target_link_libraries(${PROJECT_NAME}_bin igl::cgal igl::mosek igl::core igl::opengl_glfw igl::opengl_glfw_imgui ${OpenCV_LIBS})
+target_link_libraries(${PROJECT_NAME}_bin igl::cgal igl::mosek igl::mosek igl::core igl::opengl_glfw igl::opengl_glfw_imgui ${OpenCV_LIBS})
+

@@ -20,8 +20,10 @@ int main(int argc, char** argv) {
     target = imread( argv[3], CV_LOAD_IMAGE_COLOR );
     roi = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE );
 
+    std::cout << CV_MAJOR_VERSION << "." << CV_MINOR_VERSION << std::endl;
     //bbw(source, roi, 10);
-    transformations(source, target, roi, Eigen::MatrixXd(1,1));
+    transformations(source, target, roi, Eigen::MatrixXd(source.rows*source.cols,5));
+    //mapping(source, target, Eigen::MatrixXd(source.rows*source.cols,5), Eigen::MatrixXd(1,6));
     //test_meshing();
     /*
     if ( !source.data )

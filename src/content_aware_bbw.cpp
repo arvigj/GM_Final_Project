@@ -99,7 +99,7 @@ void test_meshing() {
  * Parameters: Mesh defined by V, F
  */
 std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::MatrixXd V, Eigen::MatrixXi F) {
-    Eigen::SparseMatrix<double> L(F.rows(),F.rows()), M(F.rows(),F.rows());
+    Eigen::SparseMatrix<double> L(V.rows(),V.rows()), M(V.rows(),V.rows());
     std::vector<Eigen::Triplet<double>> L_tripets, M_triplets;
     for (int i=0; i<F.rows(); i++) {
         Eigen::Vector3d l, cot;
@@ -336,6 +336,23 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     auto lm = LM(coords.cast<double>(),F);
     Eigen::SparseMatrix<double> Q;
     Q = lm.first * lm.second.diagonal().asDiagonal().inverse() * lm.first;
+
+    std::vector<Eigen::Triplet<double >> w_h;
+    Eigen::SparseMatrix<double> constraints(H.size(), Q.rows());
+    constraints.reserve(H.size());
+    std::cout << Q.rows() << std::endl;
+    std::cout << image.rows * image.cols << std::endl;
+    for (int i=0; i<H.size(); i++) {
+        w_h.push_back(Eigen::Triplet<double>(i, H[i].x+(image.rows*H[i].y), 1.));
+    }
+    constraints.setFromTriplets(w_h.begin(), w_h.end());
+    Eigen::VectorXd v;
+    igl::mosek::MosekData mosek_data;
+    //TODO try solving this multiple times for each handle
+    //igl::mosek::mosek_quadprog(Q, Eigen::VectorXd::Zero(Q.rows()), 0, constraints, Eigen::VectorXd::Ones(H.size()), Eigen::VectorXd::Ones(H.size()), Eigen::VectorXd::Zero(Q.rows()), Eigen::VectorXd::Ones(Q.rows()), mosek_data, v);
+
+
+
     //igl::opengl::glfw::Viewer viewer;
     //viewer.data().set_mesh(coords.block(0,0,coords.rows(),3).cast<double>(), F);
     //viewer.core.align_camera_center(coords.block(0,0,coords.rows(),3).cast<double>(), F);
@@ -596,5 +613,57 @@ Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, E
     A = cv::findHomography(M_s, M_t, CV_RANSAC);
     std::cout << A << std::endl;
 
+    //BUILD THE LINEAR SYSTEM TO SOLVE
+    auto intriangle = [](Eigen::RowVector3d a, Eigen::RowVector3d b, Eigen::RowVector3d c) {
+        double base = a.cross(b)(2);
+        double s = c.cross(b)(2) / base;
+        double t = a.cross(c)(2) / base;
+        if((s>=0) && (t>=0) && (s+t<=1))
+            return 1;
+        return 0;
+    };
+    double gamma = 0.1;
+    std::vector<std::vector<int>> vertices;
+    int tot = 0;
+    for(int i=0; i<F_valid.rows(); i++) {
+        vertices.push_back(std::vector<int>());
+        //RASTERIZE EACH TRIANGLE USING BARYCENTRIC APPROACH
+        Eigen::MatrixXd v;
+        igl::slice(V_S, F_valid.row(i), 1, v);
+        Eigen::Vector2d minv = v.colwise().minCoeff();
+        Eigen::Vector2d maxv = v.colwise().maxCoeff();
+        Eigen::RowVector3d a(0,0,0), b(0,0,0), c(0,0,0);
+        a << v.row(1) - v.row(0), 0;
+        b << v.row(2) - v.row(0), 0;
+        for(int x=minv(0); x<maxv(0); x++) {
+            for(int y=minv(1); y<maxv(1); y++) {
+                c << x, y, 0;
+                c.block(0,0,1,2) -= v.row(0);
+                if (intriangle(a,b,c)) {
+                    vertices[i].push_back(y+x*image_s.rows);
+                    tot++;
+                }
+            }
+        }
 
+    }
+    Eigen::MatrixXd w_T(tot,w.cols()), M;
+    M = Eigen::MatrixXd::Zero(tot,6*w.cols());
+    int index = 0;
+    for(int i=0; i<F_valid.rows(); i++) {
+        Eigen::MatrixXd w_temp;
+        Eigen::Map<Eigen::VectorXi> v(vertices[i].data(), vertices[i].size());
+        Eigen::Map<Eigen::RowVectorXd> m(piecewise_affine[i].data(), piecewise_affine[i].size());
+        igl::slice(w, v, 1, w_temp);
+        w_T.block(index, 0, w_temp.rows(), w_temp.cols()) = w_temp;
+        M.block(index, 0, w_temp.rows(), 6).array().rowwise() += m.array();
+        index += w_temp.rows();
+    }
+    Eigen::MatrixXd x = w_T.householderQr().solve(M);
+    std::cout << x << std::endl;
+    //cv::Mat w_T_mat, M_mat, T;
+    //cv::eigen2cv(w_T, w_T_mat);
+    //cv::eigen2cv(M, M_mat);
+    //cv::solve(w_T_mat, M_mat, T, cv::DECOMP_CHOLESKY);
 }
+
