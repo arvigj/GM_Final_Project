@@ -437,7 +437,6 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
 
      */
     Eigen::SparseMatrix<double> Q(V.rows(),V.rows());
-    Q = lm.first * lm.second.diagonal().asDiagonal().inverse() * lm.first;
     //Q = lm.first * lm.first;
     //Check if positive semi definite
     /*
@@ -446,21 +445,24 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
         throw std::runtime_error("Possibly non PSD matrix");
     }
      */
-    /*
-    for(int k=0; k<Q.outerSize(); k++) {
-        for(Eigen::SparseMatrix<double>::InnerIterator it(Q,k); it; ++it) {
-            std::cout << it.row() << " " << it.col() << " " << Q.coeff(it.row(), it.col()) << std::endl;
+
+    for(int k=0; k<lm.second.outerSize(); k++) {
+        for(Eigen::SparseMatrix<double>::InnerIterator it(lm.second,k); it; ++it) {
+            if (lm.second.coeffRef(it.row(), it.col()) == 0) {
+                lm.second.coeffRef(it.row(), it.col()) = 4;
+            }
         }
     }
-    */
-    //std::cout << lm.second.diagonal() << std::endl;
+
+    Q = lm.first * lm.second.diagonal().asDiagonal().inverse() * lm.first;
+
 
     std::vector<Eigen::Triplet<double >> w_h;
     Eigen::SparseMatrix<double> constraints(1, Q.rows());
     constraints.reserve(1);
     std::cout << Q.rows() << std::endl;
     std::cout << image.rows * image.cols << std::endl;
-    for (int i=0; i<1; i++) {
+    for (int i=0; i<5; i++) {
         w_h.push_back(Eigen::Triplet<double>(0,10000,1.));
         //w_h.push_back(Eigen::Triplet<double>(i, H[i].x+(image.rows*H[i].y), 1.));
     }
@@ -474,6 +476,28 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
 std::cout << v << std::endl;
 
 
+    //igl::mosek::mosek_quadprog(Q, Eigen::VectorXd::Zero(Q.rows()), 0, constraints, Eigen::VectorXd::Ones(1), Eigen::VectorXd::Ones(1), Eigen::VectorXd::Zero(Q.rows()), Eigen::VectorXd::Ones(Q.rows()), mosek_data, v);
+
+	/*
+    std::vector<int> loops;
+    igl::boundary_loop(F, loops);
+    std::sort(loops.begin(), loops.end());
+    std::vector<int> nonzero(V.rows());
+    Eigen::MatrixXi all_faces = Eigen::VectorXi::LinSpaced(V.rows(),0,V.rows()-1);
+    std::vector<int> all(all_faces.data(), all_faces.data()+all_faces.size());
+    std::vector<int>::iterator it;
+    it = std::set_difference(all.begin(),all.end(),loops.begin(),loops.end(),nonzero.begin());
+    nonzero.resize(it-nonzero.begin());
+    Eigen::Map<Eigen::VectorXi> valid(nonzero.data(), nonzero.size());
+    std::cout << V.rows() - valid.rows() << std::endl;
+
+    Eigen::SparseMatrix<double> L_, M_;
+    Eigen::SparseMatrix<double> Q_small;
+    igl::slice(lm.first, valid, valid, L_);
+    igl::slice(lm.second, valid, valid, M_);
+    Q_small = L_ * M_.diagonal().asDiagonal().inverse() * L_;
+    igl::mosek::mosek_quadprog(Q_small, Eigen::VectorXd::Zero(Q_small.rows()), 0, constraints, Eigen::VectorXd::Ones(5), Eigen::VectorXd::Ones(5), Eigen::VectorXd::Zero(Q_small.rows()), Eigen::VectorXd::Ones(Q_small.rows()), mosek_data, v);
+*/
 
     //igl::opengl::glfw::Viewer viewer;
     //viewer.data().set_mesh(coords.block(0,0,coords.rows(),3).cast<double>(), F);

@@ -5,8 +5,6 @@ project(ex5)
 # libigl
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-SET($ENV{MOSEKLM_LICENSE_FILE} /home/arvi/Documents/mosek/mosek.lic)
-
 # libigl
 option(LIBIGL_USE_STATIC_LIBRARY "Use libigl as static library" OFF)
 option(LIBIGL_WITH_ANTTWEAKBAR       "Use AntTweakBar"    OFF)

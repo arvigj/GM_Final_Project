@@ -21,6 +21,24 @@ int main(int argc, char** argv) {
     roi = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE );
 
     std::cout << CV_MAJOR_VERSION << "." << CV_MINOR_VERSION << std::endl;
+	/*
+    Eigen::MatrixXd V(4,3);
+    Eigen::MatrixXi F(2,3);
+    V <<    1,1,0,
+            1,-1,0,
+            -1,-1,0,
+            -1,1,0;
+    F <<    0, 1, 3,
+            1, 2, 3;
+
+    auto lm = LM(V,F);
+    std::cout << lm.first << std::endl;
+    std::cout << lm.second<< std::endl;
+*/
+    //igl::opengl::glfw::Viewer viewer;
+    //viewer.data().set_mesh(V, F);
+    //viewer.core.align_camera_center(V, F);
+    //viewer.launch();
     bbw(source, roi, 10);
     //transformations(source, target, roi, Eigen::MatrixXd(source.rows*source.cols,5));
     //mapping(source, target, Eigen::MatrixXd(source.rows*source.cols,5), Eigen::MatrixXd(1,6));
