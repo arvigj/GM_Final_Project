@@ -103,12 +103,24 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::Ma
     std::vector<Eigen::Triplet<double>> L_triplets, M_triplets;
     //First of all need to populate L and M in order to later change the elements of them
     for (int i=0; i<F.rows(); i++) {
-        std::vector<int> ijk(F.row(i).data(), F.row(i).data() + F.row(i).size());
+	Eigen::VectorXi ijk = F.row(i);
+	int count = 0;
+	Eigen::MatrixXi index(6,3);
+	Eigen::RowVector3i curr;
+	index << 0, 1, 2,
+		0, 2, 1,
+		1, 0, 2,
+		1, 2, 0,
+		2, 0, 1,
+		2, 1, 0;
+
         do{
-            L_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[1],0));
-            L_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],0));
-            M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],0));
-        } while (std::next_permutation(ijk.begin(),ijk.end()));
+		curr << index.row(count);
+		count ++;
+            L_triplets.push_back(Eigen::Triplet<double>(ijk(index(0)),ijk(index(1)),0.));
+            L_triplets.push_back(Eigen::Triplet<double>(ijk(index(0)),ijk(index(0)),0.));
+            M_triplets.push_back(Eigen::Triplet<double>(ijk(index(0)),ijk(index(0)),0.));
+        } while (count < 6);
     }
     L.reserve(L_triplets.size());
     M.reserve(M_triplets.size());
@@ -130,61 +142,61 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::Ma
         cot /= A;
         cot *= .25;
 
+	//std::cout << "l is " << l  << std::endl;
+	//std::cout << "cot is " << cot  << std::endl;
+
         assert(A > 0);
 
-        std::vector<int> ijk(F.row(i).data(), F.row(i).data() + F.row(i).size());
-        std::vector<int> precomputed_ab = {0,2,0,1,2,1};
-        std::vector<int> precomputed_bc = {1,1,2,2,0,0};
-        auto index_ab = precomputed_ab.begin();
-        auto index_bc = precomputed_bc.begin();
+        //std::vector<int> ijk(F.row(i).data(), F.row(i).data() + F.row(i).size());
+	Eigen::VectorXi ijk = F.row(i);
         int ab_index, bc_index;
+	int count = 0;
+	Eigen::MatrixXi index(6,3);
+	Eigen::RowVector3i curr;
+	index << 0, 1, 2,
+		0, 2, 1,
+		1, 0, 2,
+		1, 2, 0,
+		2, 0, 1,
+		2, 1, 0;
         do{
-            if ((ijk[0] == 0 && ijk[1]==1) || (ijk[0] == 0 && ijk[1]==1)) {
+		curr << index.row(count++);
+		//std::cout << "Triangles are " << ijk(0) << " "<<ijk(1)<<" "<<ijk(2) << std::endl;
+		//std::cout << "order of permutation is " << curr << std::endl;
+            if ((curr(0) == 0 && curr(1)==1) || (curr(0) == 0 && curr(1)==1)) {
                 ab_index = 0;
-            } else if ((ijk[0] == 0 && ijk[1]==2) || (ijk[0] == 2 && ijk[1]==0)) {
+            } else if ((curr(0) == 0 && curr(1)==2) || (curr(0) == 2 && curr(1)==0)) {
                 ab_index = 2;
             } else {
                 ab_index = 1;
             }
-            if ((ijk[1] == 0 && ijk[2]==1) || (ijk[1] == 0 && ijk[2]==1)) {
-                ab_index = 0;
-            } else if ((ijk[1] == 0 && ijk[2]==2) || (ijk[1] == 2 && ijk[2]==0)) {
-                ab_index = 2;
+            if ((curr(1) == 0 && curr(2)==1) || (curr(1) == 0 && curr(2)==1)) {
+                bc_index = 0;
+            } else if ((curr(1) == 0 && curr(2)==2) || (curr(1) == 2 &&curr(2)==0)) {
+                bc_index = 2;
             } else {
-                ab_index = 1;
+                bc_index = 1;
             }
-            L.coeffRef(ijk[0],ijk[1]) += 0.5 * cot(ab_index);
-            L.coeffRef(ijk[0],ijk[0]) -= 0.5 * cot(ab_index);
-            //L.coeffRef(ijk[0],ijk[1]) -= 0.5 * cot(*index_ab);
-            //L.coeffRef(ijk[0],ijk[0]) += 0.5 * cot(*index_ab);
-            //L_triplets.push_back(Eigen::Triplet<double>(ijk[0], ijk[1], -0.5 * cot(*index_ab)));
-            //L_triplets.push_back(Eigen::Triplet<double>(ijk[0], ijk[0], 0.5 * cot(*index_ab)));
-            if((cot.array() >= 0).all()) {
-                M.coeffRef(ijk[0],ijk[0]) += (1./8.)*cot(ab_index)*std::pow(l(ab_index),2);
-                //M.coeffRef(ijk[0],ijk[0]) += (1./8.)*cot(*index_ab)*l(*index_ab)*l(*index_ab);
-                //M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./8.)*cot(*index_ab)*cot(*index_ab)*l(*index_ab)));
+            L.coeffRef(ijk(curr(0)),ijk(curr(1))) += 0.5 * cot(ab_index);
+            L.coeffRef(ijk(curr(0)),ijk(curr(0))) -= 0.5 * cot(ab_index);
+            if(cot(0)>=0 && cot(1)>0 && cot(2)>0) {
+                M.coeffRef(ijk(curr(0)),ijk(curr(0))) += (1./8.)*cot(ab_index)*std::pow(l(ab_index),2);
+		//std::cout << "Adding "<< M.coeffRef(ijk(curr(0)),ijk(curr(0))) << " to vertex "<<curr(0) << std::endl;
+		//std::cout << "AB index is "<<ab_index<<std::endl;
+		//std::cout << "cot_ab "<<cot(ab_index)<<std::endl;
+		//std::cout << "l_ab "<<l(ab_index)<<std::endl;
             } else {
-                M.coeffRef(ijk[0],ijk[0]) += (1./8.)*A ? cot(bc_index) >= 0 : (1./4.)*A;
-                //M.coeffRef(ijk[0],ijk[0]) += (1./8.)*A ? cot(*index_bc) >= 0 : (1./4.)*A;
-                /*
-                if (cot(*index_bc) >= 0) {
-                    M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./8.)*A));
-                } else {
-                    M_triplets.push_back(Eigen::Triplet<double>(ijk[0],ijk[0],(1./4.)*A));
-                }
-                 */
+		if (cot(bc_index) >= 0) {
+			M.coeffRef(ijk(curr(0)),ijk(curr(0))) += (1./8.)*A;
+		} else {
+			M.coeffRef(ijk(curr(0)),ijk(curr(0))) += (1./4.)*A;
+		}
+		//std::cout << "Adding "<< M.coeffRef(ijk(curr(0)),ijk(curr(0))) << " to relative vertex "<<curr(0) <<" with index "<<ijk(curr(0)) << std::endl;
+		//std::cout << "AB index is "<<ab_index<<std::endl;
+		//std::cout << "A is "<<A<<std::endl;
             }
-            /*
-            if (M.coeff(ijk[0],ijk[0]) == 0 || M.coeff(ijk[1],ijk[1]) == 0 || M.coeff(ijk[2],ijk[2]) == 0) {
-                std::cout << A << std::endl;
-                std::cout << l << std::endl;
-                std::cout << cot << std::endl;
-                throw std::runtime_error("Zero in weight matrix");
-            }
-             */
-            index_ab++;
-            index_bc++;
-        } while (std::next_permutation(ijk.begin(),ijk.end()));
+                    } while (count < 6);
+	//std::cout << "Repeated " << count << " many times"<<std::endl;
     }
     return std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>>(L,M);
 };
@@ -192,6 +204,8 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::Ma
 Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     image.convertTo(image, CV_32F);
     roi.convertTo(roi, CV_32F);
+	cv::resize(image,image,cv::Size(), 0.25,0.25,cv::INTER_LINEAR);
+	cv::resize(roi,roi,cv::Size(), 0.25,0.25,cv::INTER_LINEAR);
     image /= 255;
     roi /= 255;
     cv::Mat image_LAB;
@@ -394,7 +408,13 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     V.col(3) << 0 * A_vec_incl.cast<double>()/255.;
     V.col(4) << 0 * B_vec_incl.cast<double>()/255.;
 
-
+    Eigen::VectorXi b(1);
+    b<<1000;
+    Eigen::MatrixXd bc(1,1), W;
+    bc<<1;
+    //igl::BBWData bbw_data;
+    //igl::mosek::MosekData m_data;
+    //igl::mosek::bbw(V, F, b, bc, bbw_data, m_data, W);
     /*
     igl::opengl::glfw::Viewer viewer;
     viewer.data().set_mesh(V.block(0,0,V.rows(),3), F);
@@ -403,6 +423,8 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
      */
 
     auto lm = LM(V,F);
+    //igl::harmonic(lm.first, lm.second, b, bc, 2, W);
+    //return Eigen::MatrixXd(0,0);
     /*
     Eigen::SparseMatrix<double> weight_inv;
     lm.second.diagonal().asDiagonal().inverse().evalTo(weight_inv);
@@ -431,7 +453,7 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
         }
     }
     */
-    std::cout << lm.second.diagonal() << std::endl;
+    //std::cout << lm.second.diagonal() << std::endl;
 
     std::vector<Eigen::Triplet<double >> w_h;
     Eigen::SparseMatrix<double> constraints(1, Q.rows());
@@ -447,7 +469,9 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     igl::mosek::MosekData mosek_data;
     //mosek_data.iparam[MSK_IPAR_CHECK_CONVEXITY] = MSK_CHECK_CONVEXITY_NONE;
     //TODO try solving this multiple times for each handle
+	std::cout << "Reached mosek" << std::endl;
     igl::mosek::mosek_quadprog(Q, Eigen::VectorXd::Zero(Q.rows()), 0, constraints, Eigen::VectorXd::Ones(1), Eigen::VectorXd::Ones(1), Eigen::VectorXd::Zero(Q.rows()), Eigen::VectorXd::Ones(Q.rows()), mosek_data, v);
+std::cout << v << std::endl;
 
 
 
