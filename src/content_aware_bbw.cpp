@@ -95,6 +95,13 @@ void test_meshing() {
 }
 
 
+std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM_(Eigen::MatrixXd V, Eigen::MatrixXi F) {
+    Eigen::SparseMatrix<double> L, M;
+    igl::cotmatrix(V, F, L);
+    igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_VORONOI, M);
+    return std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>>(-L,M);
+};
+
 /*
  * Parameters: Mesh defined by V, F
  */
@@ -199,14 +206,14 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>> LM(Eigen::Ma
 Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     int orig_rows = image.rows;
     double factor = 0.25;
+    cv::Mat image_copy;
+    image.copyTo(image_copy);
     cv::resize(image,image,cv::Size(), factor,factor,cv::INTER_LINEAR);
     cv::resize(roi,roi,cv::Size(), factor,factor,cv::INTER_LINEAR);
     image.convertTo(image, CV_32F);
     roi.convertTo(roi, CV_32F);
     image /= 255;
     roi /= 255;
-    cv::Mat image_copy;
-    image.copyTo(image_copy);
     cv::Mat image_LAB;
     cv::cvtColor(image, image_LAB, CV_BGR2Lab);
     std::vector<Eigen::MatrixXd> w(m);
@@ -395,9 +402,9 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     std::cout << A_vec_incl.size() << std::endl;
     std::cout << B_vec_incl.size() << std::endl;
     V.conservativeResize(V.rows(), 5);
-    V.col(2) << 1. * L_vec_incl.cast<double>()/255.;
-    V.col(3) << 1. * A_vec_incl.cast<double>()/255.;
-    V.col(4) << 1. * B_vec_incl.cast<double>()/255.;
+    V.col(2) << 16. * L_vec_incl.cast<double>()/255.;
+    V.col(3) << 16. * A_vec_incl.cast<double>()/255.;
+    V.col(4) << 16. * B_vec_incl.cast<double>()/255.;
 
     /*
     igl::opengl::glfw::Viewer viewer;
@@ -406,7 +413,7 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     viewer.launch();
      */
 
-    auto lm = LM(V,F);
+    auto lm = LM_(V,F);
     Eigen::SparseMatrix<double> Q(V.rows(),V.rows());
     //Check if positive semi definite
     /*
@@ -471,23 +478,26 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
         }
 
     }
-    Eigen::MatrixXd W_upscaled((int)(image.rows*image.cols/(factor*factor)),W_out.cols());
+    Eigen::MatrixXd W_upscaled(image_copy.rows*image_copy.cols,W_out.cols());
     for (int i=0; i<W_out.cols(); i++) {
         Eigen::VectorXd w_channel = W_out.col(i);
-        Eigen::MatrixXd w_matrix = Eigen::Map<Eigen::MatrixXd>(w_channel.data(), image.rows, image.cols);
+        Eigen::MatrixXd w_matrix = Eigen::Map<Eigen::MatrixXd, Eigen::RowMajor>(w_channel.data(), image.rows, image.cols);
         cv::Mat w_up;
         cv::eigen2cv(w_matrix, w_up);
-        cv::resize(w_up, w_up, cv::Size((int)image.rows/factor, (int)image.cols/factor));
+        cv::resize(w_up, w_up, cv::Size(image_copy.rows, image_copy.cols));
         cv::cv2eigen(w_up, w_matrix);
         W_upscaled.col(i) << Eigen::Map<Eigen::VectorXd>(w_matrix.data(), w_matrix.size());
     }
-    /*
-    Eigen::VectorXd weights = W.rowwise().maxCoeff();
-    Eigen::MatrixXd alpha = Eigen::Map<Eigen::MatrixXd>(weights.data(), image.rows, image.cols);
-    cv::Mat a(image.rows, image.cols, CV_32FC1), image_new(image.rows, image.cols, CV_32FC4);
+
+    Eigen::VectorXd weights = W_upscaled.rowwise().maxCoeff();
+    Eigen::MatrixXd alpha = Eigen::Map<Eigen::MatrixXd>(weights.data(), image_copy.rows, image_copy.cols);
+    cv::Mat a(image_copy.rows, image_copy.cols, CV_32FC1), image_new(image_copy.rows, image_copy.cols, CV_32FC4);
     cv::eigen2cv(alpha, a);
-    a.convertTo(a, CV_32F);
+    a *= 255;
+    a.convertTo(a, CV_8U);
+    cv::cvtColor(a, a, CV_GRAY2BGR);
     std::cout << a << std::endl;
+    /*
     std::vector<cv::Mat> RGB_channels;
     cv::split(image_copy,RGB_channels);
     RGB_channels.push_back(a);
@@ -495,13 +505,13 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
         std::cout << i->rows << "\t" << i->cols << "\t" << i->depth() << std::endl;
     }
     cv::merge(RGB_channels, image_new);
-    image_new *= 255;
     image_new.convertTo(image_new, CV_8UC4);
+     */
+    cv::multiply(image_copy, a, image_copy);
 
     cv::namedWindow("Image", cv::WINDOW_AUTOSIZE );
-    cv::imshow("Image", image_new);
+    cv::imshow("Image", a);
     cv::waitKey(0);
-     */
     //igl::mosek::mosek_quadprog(Q, Eigen::VectorXd::Zero(Q.rows()), 0, constraints, Eigen::VectorXd::Ones(1), Eigen::VectorXd::Ones(1), Eigen::VectorXd::Zero(Q.rows()), Eigen::VectorXd::Ones(Q.rows()), mosek_data, v);
 
 	/*
@@ -780,9 +790,11 @@ Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, E
         piecewise_affine.push_back(t_ * t.inverse());
     }
 
-    cv::Mat A;
-    A = cv::findHomography(M_s, M_t, CV_RANSAC);
-    std::cout << A << std::endl;
+    cv::Mat A_match;
+    Eigen::MatrixXd A_eig;
+    A_match = cv::findHomography(M_s, M_t, CV_RANSAC);
+    cv::cv2eigen(A_match, A_eig);
+    std::cout << A_match << std::endl;
 
     //BUILD THE LINEAR SYSTEM TO SOLVE
     auto intriangle = [](Eigen::RowVector3d a, Eigen::RowVector3d b, Eigen::RowVector3d c) {
@@ -825,28 +837,40 @@ Eigen::MatrixXd transformations(cv::Mat image_s, cv::Mat image_t, cv::Mat roi, E
     Eigen::MatrixXd w_T(tot,w.cols()), M;
     M = Eigen::MatrixXd::Zero(tot,6);
     int index = 0;
+    Eigen::MatrixXd A_ = Eigen::MatrixXd::Zero(6,6);
+    Eigen::MatrixXd b_ = Eigen::MatrixXd::Zero(6,w.cols());
+    Eigen::MatrixXd p_, ptp, ptMp, W(w.cols(),1);
     for(int i=0; i<F_valid.rows(); i++) {
-        Eigen::MatrixXd w_temp;
-        Eigen::Map<Eigen::VectorXi> v(vertices[i].data(), vertices[i].size());
-        Eigen::Map<Eigen::RowVectorXd> m(piecewise_affine[i].data(), piecewise_affine[i].size());
-        igl::slice(w, v, 1, w_temp);
-        w_T.block(index, 0, w_temp.rows(), w_temp.cols()) = w_temp;
-        std::cout << w_temp << std::endl;
-        std::cout << m << std::endl;
-        M.block(index, 0, w_temp.rows(), 6).array().rowwise() += m.array();
-        index += w_temp.rows();
+        for(int p=0; p<vertices[i].size(); p++) {
+            W << w.row(vertices[i][p]).array().transpose();
+            p_ = Eigen::KroneckerProduct<Eigen::MatrixXd, Eigen::MatrixXd>(Eigen::Vector3d(vertices[i][p]%image_s.rows,vertices[i][p]%image_s.rows,1),Eigen::MatrixXd::Identity(2,2)).transpose();
+            ptp = p_.transpose() * p_;
+            ptMp = p_.transpose() * piecewise_affine[i] * Eigen::Vector3d(vertices[i][p]%image_s.rows,vertices[i][p]%image_s.rows,1);
+            ptMp *= W.transpose();
+            //ptMp /= W.squaredNorm();
+            A_ += (double)roi.at<int>(vertices[i][p]/image_s.rows, vertices[i][p]%image_s.rows)/255. * ptp;
+            b_ += (double)roi.at<int>(vertices[i][p]/image_s.rows, vertices[i][p]%image_s.rows)/255. * ptMp;
+        }
     }
 
     double lambda = 0.1;
+    for(int i=0; i<image_s.rows*image_s.cols; i++) {
+        double r = roi.at<int>(i/image_s.rows, i%image_s.rows)/255.;
+        if (r == 0) continue;
+        W << w.row(i).array().transpose();
+        p_ = Eigen::KroneckerProduct<Eigen::MatrixXd, Eigen::MatrixXd>(Eigen::Vector3d(i%image_s.rows,i%image_s.rows,1),Eigen::MatrixXd::Identity(2,2)).transpose();
+        ptp = p_.transpose() * p_;
+        ptMp = p_.transpose() * A_eig.block(0,0,2,3) * Eigen::Vector3d(i%image_s.rows,i%image_s.rows,1);
+        ptMp *= W.transpose();
+        //ptMp /= W.squaredNorm();
+        A_ += r*lambda*ptp;
+        b_ += r*lambda*ptMp;
+    }
 
-    std::cout << w_T.rows() << "\t" << w_T.cols() << std::endl;
-    std::cout << M.rows() << "\t" << M.cols() << std::endl;
-    Eigen::MatrixXd x = w_T.householderQr().solve(M);
-    std::cout << x << std::endl;
-    //cv::Mat w_T_mat, M_mat, T;
-    //cv::eigen2cv(w_T, w_T_mat);
-    //cv::eigen2cv(M, M_mat);
-    //cv::solve(w_T_mat, M_mat, T, cv::DECOMP_CHOLESKY);
+    Eigen::MatrixXd x = A_.householderQr().solve(b_);
+    std::cout << "A matrix: " << A_ << std::endl;
+    std::cout << "b matrix: " << b_ << std::endl;
+    std::cout << "x matrix: " << x << std::endl;
     return x;
 }
 

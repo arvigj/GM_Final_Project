@@ -184,6 +184,8 @@ Eigen::MatrixXd mapping(cv::Mat image_s, cv::Mat image_t, Eigen::MatrixXd w, Eig
         //solve for delta T_k
         for(int i=0; i<w.cols(); i++) {
             delta_T[i] = H_phi.householderQr().solve(SD.transpose()*(R.array()*E.array()).matrix());
+            std::cout << delta_T[i].rows() << "\t" << delta_T[i].cols() << std::endl;
+            std::cout << w.cols() << std::endl;
         }
 
         //solve for M
@@ -192,8 +194,9 @@ Eigen::MatrixXd mapping(cv::Mat image_s, cv::Mat image_t, Eigen::MatrixXd w, Eig
             M[i] = Eigen::MatrixXd::Zero(2,1);
             for(int k=0; k<w.cols(); k++) {
                 T_m = Eigen::Map<Eigen::MatrixXd>(T.row(i).data(), 2, 3);
+                delta_T[i].block(6*k,0,6,1);
                 delta_T_m = Eigen::Map<Eigen::MatrixXd>(delta_T[i].block(6*k,0,6,1).data(), 2, 3);
-                M[i] += w(i,k) * T_m * delta_T_m.transpose();
+                M[i] += w(i,k) * T_m * delta_T_m.transpose() * Eigen::Vector2d(i%image_s.rows, i/image_s.cols);
             }
         }
 

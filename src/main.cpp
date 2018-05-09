@@ -21,6 +21,10 @@ int main(int argc, char** argv) {
     roi = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE );
 
     std::cout << CV_MAJOR_VERSION << "." << CV_MINOR_VERSION << std::endl;
+    Eigen::Vector3d a(1,1,1);
+    Eigen::MatrixXd b(1,3);
+    std::cout << a * b << std::endl;
+
 	/*
     Eigen::MatrixXd V(4,3);
     Eigen::MatrixXi F(2,3);
@@ -39,10 +43,11 @@ int main(int argc, char** argv) {
     //viewer.data().set_mesh(V, F);
     //viewer.core.align_camera_center(V, F);
     //viewer.launch();
-    //Eigen::MatrixXd w = bbw(source, roi, 10);
+    Eigen::MatrixXd w = bbw(source, roi, 10);
     //Eigen::MatrixXd T = transformations(source, target, roi, w);
+    //Eigen::MatrixXd T = transformations(source, target, roi, Eigen::MatrixXd::Zero(source.rows*source.cols,5));
 
-    mapping(source, target, Eigen::MatrixXd(source.rows*source.cols,5), Eigen::MatrixXd(1,6));
+    //mapping(source, target, Eigen::MatrixXd(source.rows*source.cols,5), Eigen::MatrixXd(5,6));
     //test_meshing();
     /*
     if ( !source.data )
