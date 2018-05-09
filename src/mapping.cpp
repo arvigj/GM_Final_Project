@@ -8,6 +8,10 @@
  * w must be numpixels by m
  */
 Eigen::MatrixXd mapping(cv::Mat image_s, cv::Mat image_t, Eigen::MatrixXd w, Eigen::MatrixXd T_0) {
+    image_s.convertTo(image_s,CV_32F);
+    image_s.convertTo(image_t,CV_32F);
+    image_s /= 255;
+    image_t /= 255;
     Eigen::MatrixXd G(6*image_s.rows*image_s.cols,1);
     cv::Mat grad_x, grad_y;
     cv::Sobel(image_s, grad_x, CV_32F, 1, 0);
@@ -106,11 +110,92 @@ Eigen::MatrixXd mapping(cv::Mat image_s, cv::Mat image_t, Eigen::MatrixXd w, Eig
         }
     }
 
-    Eigen::MatrixXd Z, E, R;
-    std::vector<Eigen::MatrixXd> delta_T;
+    std::vector<Eigen::MatrixXd> delta_T(w.cols());
+    std::vector<Eigen::MatrixXd> M(image_s.rows*image_s.cols);
+    Eigen::MatrixXd lambda = Eigen::MatrixXd::Zero(2*w.cols(),1);
     double epsilon = -1e-4;
     do{
 
+        //construct Z by backwards warp
+        Eigen::MatrixXd Z(3*image_s.rows*image_s.cols,1);
+
+        //construct Z by backwards warp
+        Eigen::MatrixXd E(3*image_s.rows*image_s.cols,1);
+        E = Z;
+
+        //construct R
+        Eigen::MatrixXd R(3*image_s.rows*image_s.cols,1);
+
+        //construct phi_i
+        Eigen::VectorXd phi_i(std::pow(L_half,2));
+        Eigen::MatrixXd intermediate;
+        for(int j=0; j<L_half; j++) {
+            for(int i=0; i<L_half; i++) {
+                x = grid_x.block(i,j,10,10);
+                y = grid_y.block(i,j,10,10);
+                Eigen::Map<Eigen::VectorXi> cols(x.data(),100);
+                Eigen::Map<Eigen::VectorXi> rows(y.data(),100);
+                index << rows.eval() + image_s.rows*cols.eval();
+                igl::slice(R, index, 1, intermediate);
+                phi_i(i+j*L_half) = intermediate.array().sum()/3;
+            }
+        }
+
+        //construct Ha_phi
+        Eigen::MatrixXd Ha_phi = Eigen::MatrixXd::Zero(Ha_i[0].rows(),Ha_i[0].cols());
+        for(int i=0; i<std::pow(L_half,2); i++) {
+            Ha_phi += phi_i(i) * Ha_i[i];
+        }
+
+        //solve linear system 1
+        Eigen::MatrixXd delta_lambda = Ha_phi.householderQr().solve(A.transpose()*(R.array()*E.array()).matrix());
+
+        //update lambda
+        lambda += delta_lambda;
+
+
+        //update E again
+        E = Z;
+
+        //update R again
+        R = E;
+
+        //update phi_i again
+        for(int j=0; j<L_half; j++) {
+            for(int i=0; i<L_half; i++) {
+                x = grid_x.block(i,j,10,10);
+                y = grid_y.block(i,j,10,10);
+                Eigen::Map<Eigen::VectorXi> cols(x.data(),100);
+                Eigen::Map<Eigen::VectorXi> rows(y.data(),100);
+                index << rows.eval() + image_s.rows*cols.eval();
+                igl::slice(R, index, 1, intermediate);
+                phi_i(i+j*L_half) = intermediate.array().sum()/3;
+            }
+        }
+
+
+        //update H_phi (6mx6m)
+        Eigen::MatrixXd H_phi = Eigen::MatrixXd::Zero(H_i[0].rows(),H_i[0].cols());
+        for(int i=0; i<std::pow(L_half,2); i++) {
+            H_phi += phi_i(i) * H_i[i];
+        }
+
+
+        //solve for delta T_k
+        for(int i=0; i<w.cols(); i++) {
+            delta_T[i] = H_phi.householderQr().solve(SD.transpose()*(R.array()*E.array()).matrix());
+        }
+
+        //solve for M
+        Eigen::MatrixXd T_m, delta_T_m, pixel(3,1);
+        for(int i=0; i<image_s.rows*image_s.cols; i++) {
+            M[i] = Eigen::MatrixXd::Zero(2,1);
+            for(int k=0; k<w.cols(); k++) {
+                T_m = Eigen::Map<Eigen::MatrixXd>(T.row(i).data(), 2, 3);
+                delta_T_m = Eigen::Map<Eigen::MatrixXd>(delta_T[i].block(6*k,0,6,1).data(), 2, 3);
+                M[i] += w(i,k) * T_m * delta_T_m.transpose();
+            }
+        }
 
         bool end_flag = true;
         for(auto i=delta_T.begin(); i!=delta_T.end(); i++) {
@@ -120,6 +205,7 @@ Eigen::MatrixXd mapping(cv::Mat image_s, cv::Mat image_t, Eigen::MatrixXd w, Eig
         }
         if (end_flag)
             break;
+        std::cout << "Looping" << std::endl;
     } while(true);
 
 
