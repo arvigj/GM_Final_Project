@@ -39,8 +39,9 @@ int main(int argc, char** argv) {
     //viewer.data().set_mesh(V, F);
     //viewer.core.align_camera_center(V, F);
     //viewer.launch();
-    bbw(source, roi, 10);
-    //transformations(source, target, roi, Eigen::MatrixXd(source.rows*source.cols,5));
+    Eigen::MatrixXd w = bbw(source, roi, 10);
+    Eigen::MatrixXd T = transformations(source, target, roi, w);
+
     //mapping(source, target, Eigen::MatrixXd(source.rows*source.cols,5), Eigen::MatrixXd(1,6));
     //test_meshing();
     /*
