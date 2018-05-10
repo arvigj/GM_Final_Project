@@ -12,9 +12,9 @@ set(SEARCH_PATHS
   /usr/local/mosek/7/tools/platform/osx64x86/
   /usr/local/mosek/8/tools/platform/osx64x86/
   /opt/mosek/7/tools/platform/linux64x86/
-/home/parallels/mosek/
-    /home/parallels/mosek/8/tools/platform/linux64x86/h
-    /home/parallels/mosek/8/tools/platform/linux64x86/bin
+/home/arvi/mosek/
+    /home/arvi/mosek/8/tools/platform/linux64x86/h
+    /home/arvi/mosek/8/tools/platform/linux64x86/bin
 )
 
 find_path(MOSEK_INCLUDE_DIR mosek.h

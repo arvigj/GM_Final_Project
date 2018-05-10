@@ -304,10 +304,10 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     x_coords = Eigen::MatrixXi::Zero(roi.rows,roi.cols);
     y_coords = Eigen::MatrixXi::Zero(roi.rows,roi.cols);
     for (int i=0; i<roi.rows; i++) {
-        y_coords.row(i).array() += i;
+        x_coords.row(i).array() += i;
     }
     for (int i=0; i<roi.cols; i++) {
-        x_coords.col(i).array() += i;
+        y_coords.col(i).array() += i;
     }
     cv::cv2eigen(roi>0, roi_matrix);
     roi_matrix /= 255;
@@ -317,8 +317,8 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     Eigen::VectorXi scalar_field(roi_vec.size());
     Eigen::MatrixXi coords(roi_matrix.size(), 3);
     scalar_field << roi_vec;
-    coords.col(0) << y_vec;
-    coords.col(1) << x_vec;
+    coords.col(0) << x_vec;
+    coords.col(1) << y_vec;
     coords.col(2) << Eigen::VectorXi::Zero(roi_matrix.size());
 
 
@@ -373,10 +373,6 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     Eigen::MatrixXi F_(faces.size(), 3);
     for (int i=0; i<faces.size(); i++) {
         F_.row(i) << faces[i];
-        Eigen::Vector3d a,b;
-        a = coords.row(faces[i](0)).cast<double>() - coords.row(faces[i](1)).cast<double>();
-        b = coords.row(faces[i](2)).cast<double>() - coords.row(faces[i](1)).cast<double>();
-        //std::cout << 0.5*(a.cross(b).norm()) << std::endl;
     }
 
     Eigen::MatrixXd V;
@@ -433,7 +429,6 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
 
     Q = lm.first * lm.second.diagonal().asDiagonal().inverse() * lm.first;
 
-    std::cout << IM << std::endl;
 
     std::vector<Eigen::Triplet<double >> w_h;
     std::vector<Eigen::SparseMatrix<double>> constraints;
@@ -464,39 +459,49 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
 	}
 	igl::normalize_row_sums(W,W);
     Eigen::MatrixXd Col;
-    //igl::jet(W.rowwise().maxCoeff(), true, Col);
-    //igl::opengl::glfw::Viewer viewer;
-    //viewer.data().set_mesh(V.block(0,0,V.rows(),3), F);
-    //viewer.core.align_camera_center(V.block(0,0,V.rows(),3), F);
-    //viewer.data().set_colors(W.rowwise().maxCoeff());
-    //viewer.launch();
+    for(int i=0; i<W.cols(); i++) {
+        igl::jet(W.col(i), true, Col);
+        igl::opengl::glfw::Viewer viewer;
+        viewer.data().set_mesh(V.block(0,0,V.rows(),3), F);
+        viewer.core.align_camera_center(V.block(0,0,V.rows(),3), F);
+        viewer.data().set_colors(Col);
+        viewer.launch();
+    }
 
     Eigen::MatrixXd W_out = Eigen::MatrixXd::Zero(image.rows*image.cols, W.cols());
+    for(int i=0; i<W.rows(); i++) {
+        W_out.row(V(i,1)*image.rows+V(i,0)) = W.row(i);
+    }
+    /*
     for (int i=0; i<W_out.rows(); i++) {
         if (IM(i,0) != -1) {
             W_out.row(i) << W.row(IM(i,0));
         }
 
     }
+     */
     Eigen::MatrixXd W_upscaled(image_copy.rows*image_copy.cols,W_out.cols());
     for (int i=0; i<W_out.cols(); i++) {
         Eigen::VectorXd w_channel = W_out.col(i);
-        Eigen::MatrixXd w_matrix = Eigen::Map<Eigen::MatrixXd, Eigen::RowMajor>(w_channel.data(), image.rows, image.cols);
+        Eigen::MatrixXd w_matrix = Eigen::Map<Eigen::MatrixXd, Eigen::ColMajor>(w_channel.data(), image.rows, image.cols);
+        /*
+        Eigen::MatrixXd w_matrix(image.rows, image.cols);
+        for(int j=0; j<w_matrix.rows(); j++) {
+            w_matrix.row(j) = w_channel.block(j*image.cols, 0, image.cols, 1).array().transpose();
+        }
+         */
         cv::Mat w_up;
         cv::eigen2cv(w_matrix, w_up);
-        cv::resize(w_up, w_up, cv::Size(image_copy.rows, image_copy.cols));
+        cv::resize(w_up, w_up, cv::Size(image_copy.rows, image_copy.cols), cv::INTER_CUBIC);
         cv::cv2eigen(w_up, w_matrix);
         W_upscaled.col(i) << Eigen::Map<Eigen::VectorXd>(w_matrix.data(), w_matrix.size());
     }
 
-    Eigen::VectorXd weights = W_upscaled.rowwise().maxCoeff();
-    Eigen::MatrixXd alpha = Eigen::Map<Eigen::MatrixXd>(weights.data(), image_copy.rows, image_copy.cols);
-    cv::Mat a(image_copy.rows, image_copy.cols, CV_32FC1), image_new(image_copy.rows, image_copy.cols, CV_32FC4);
+    Eigen::VectorXd weights = W_out.col(1);
+    Eigen::MatrixXd alpha = Eigen::Map<Eigen::MatrixXd>(weights.data(), image.rows, image.cols);
+    alpha *= 255;
+    cv::Mat a;
     cv::eigen2cv(alpha, a);
-    a *= 255;
-    a.convertTo(a, CV_8U);
-    cv::cvtColor(a, a, CV_GRAY2BGR);
-    std::cout << a << std::endl;
     /*
     std::vector<cv::Mat> RGB_channels;
     cv::split(image_copy,RGB_channels);
@@ -507,7 +512,6 @@ Eigen::MatrixXd bbw(cv::Mat image, cv::Mat roi, int m) {
     cv::merge(RGB_channels, image_new);
     image_new.convertTo(image_new, CV_8UC4);
      */
-    cv::multiply(image_copy, a, image_copy);
 
     cv::namedWindow("Image", cv::WINDOW_AUTOSIZE );
     cv::imshow("Image", a);
